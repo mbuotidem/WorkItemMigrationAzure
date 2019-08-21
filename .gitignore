@@ -3,3 +3,5 @@
 ################################################################################
 
 /WorkItemMigration/.vs/WorkItemMigration/v16
+/WorkItemMigration/bin/Debug/netcoreapp2.2
+/WorkItemMigration/obj
