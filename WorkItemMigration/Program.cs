@@ -7,8 +7,10 @@ using Microsoft.VisualStudio.Services.WebApi.Patch;
 using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
+using WorkItemMigration;
 
 namespace TFRestApiApp
 {
@@ -16,14 +18,15 @@ namespace TFRestApiApp
     {
         //Used for building configuration file to grab Personal Access Token from Secret Manager 
         private static IConfigurationRoot Configuration;
-        
-        
+
+
         //URL for Azure DevOps Project
-        static readonly string devOpsOrgUrl = "https://dev.azure.com/miisaac/";
+        //static readonly string devOpsOrgUrl = "https://hc-it-ea.visualstudio.com/";
+        const string devOpsOrgUrl = "https://dev.azure.com/miisaac/";
 
         //Learn more about Work Item Tracking at https://docs.microsoft.com/en-us/azure/devops/integrate/quickstarts/work-item-quickstart?view=azure-devops
         static WorkItemTrackingHttpClient WitClient;
-        
+
 
         static void Main(string[] args)
         {
@@ -32,7 +35,7 @@ namespace TFRestApiApp
             var builder = new ConfigurationBuilder();
             builder.AddUserSecrets<Program>();
             Configuration = builder.Build();
-
+            
             try
             {
                 //Connect to Azure DevOps Organization using the OrgUrl and PAT
@@ -40,18 +43,44 @@ namespace TFRestApiApp
 
                 //Set parameters (1. work item id to move if moving single work item, for example to test that this works. 2.name of teamProject source & destination, and 
                 //3. query path i.e path to your Query created in Azure Dev Ops)
-                
-                string sourceTeamProject = "interro.us", destinationTeamProject = "PeerTutor.us"; //Replace the team projects names here with the names of your own projects
-               
-                string queryPath = "Shared Queries/Move"; //Replace this string with the path to your own query. Learn about queries here: https://docs.microsoft.com/en-us/azure/devops/boards/queries/?view=azure-devops
 
-                //Move only one work item
-                //int wiIdToMove = 1; //workitem id
-                //MoveWorkItem(wiIdToMove, destinationTeamProject);
+                //string sourceTeamProject = "Craigs List", destinationTeamProject = "Craigs List\\EA Board\\Designs and Consulting"; //Replace the team projects names here with the names of your own projects
+                string sourceTeamProject = "PeerTutor.us"; 
 
-                //Move work items from a flat query result
+                string queryPath = "My Queries/All"; //Replace this string with the path to your own query. Learn about queries here: https://docs.microsoft.com/en-us/azure/devops/boards/queries/?view=azure-devops
+
                 List<int> wis = RunStoredQuery(sourceTeamProject, queryPath);
-                foreach (int wiId in wis) MoveWorkItem(wiId, destinationTeamProject);
+                List<WorkItem> workItems = new List<WorkItem>();
+
+                foreach (int wid in wis)
+                {
+                    Console.WriteLine($"Getting workItem #{wid}");
+                    workItems.Add(GetWorkItem(wid));
+                        
+                }
+                
+               foreach (WorkItem workitem in workItems)
+                {
+                    using (var context = new WorkItemContext())
+                    {
+
+                        var modifiedWorkItem = new DWWorkItem()
+                        {
+
+                            Id = workitem.Id,
+                            Url = workitem.Url,
+                            Rev = workitem.Rev,
+                            Fields = workitem.Fields,
+                            Relations = workitem.Relations,
+                            //CommentVersionRef = workitem.CommentVersionRef,
+                            //Links = workitem.Links,
+                            
+                        };
+                        Console.WriteLine($"Saving workItem #{workitem.Id}");
+                        context.WorkItems.Add(modifiedWorkItem);
+                        context.SaveChanges();
+                    }
+                }
                 
             }
             catch (Exception ex)
@@ -59,8 +88,10 @@ namespace TFRestApiApp
                 Console.WriteLine("Exception: " + ex.Message);
                 if (ex.InnerException != null) Console.WriteLine("Detailed Info: " + ex.InnerException.Message);
                 Console.WriteLine("Stack:\n" + ex.StackTrace);
-                
+
             }
+
+            
         }
 
 
@@ -121,9 +152,9 @@ namespace TFRestApiApp
             Dictionary<string, object> fields = new Dictionary<string, object>();
 
             //Fields Reference available at : https://docs.microsoft.com/en-us/azure/devops/reference/xml/reportable-fields-reference?view=azure-devops&viewFallbackFrom=vsts
-            fields.Add("System.TeamProject", destinationTeamProject);
+            //fields.Add("System.TeamProject", destinationTeamProject);
             fields.Add("System.AreaPath", destinationTeamProject);
-            fields.Add("System.IterationPath", destinationTeamProject);
+            //fields.Add("System.IterationPath", destinationTeamProject);
 
             var editedWI = UpdateWorkItem(WIId, fields);
 
@@ -167,7 +198,7 @@ namespace TFRestApiApp
         static void InitClients(VssConnection Connection)
         {
             WitClient = Connection.GetClient<WorkItemTrackingHttpClient>();
-            
+
         }
 
         static void ConnectWithDefaultCreds(string ServiceURL)
@@ -189,6 +220,6 @@ namespace TFRestApiApp
         }
         #endregion
 
-        
+
     }
 }
